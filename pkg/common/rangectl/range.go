@@ -106,6 +106,10 @@ func ParseIpv4Range(ip string) (Range, error) {
 			return Range{}, err
 		}
 
+		if len(ips) == 0 {
+			return Range{}, nil
+		}
+
 		begin, err := ps.ParseIPv4(ips[0])
 		if err != nil {
 			fmt.Println(err)
@@ -192,7 +196,7 @@ func ParseIPFromFile(path string) ([]Range, error) {
 				continue
 			}
 			ips = append(ips, rst)
-		}else{
+		} else {
 			tmp_ips, mask, err := ps.DomainToIp(ip)
 			if err != nil {
 				fmt.Println(err)
@@ -209,7 +213,7 @@ func ParseIPFromFile(path string) ([]Range, error) {
 					fmt.Println("Error occured while parse iprange")
 					continue
 				}
-				ips = append(ips,result)
+				ips = append(ips, result)
 			}
 		}
 	}

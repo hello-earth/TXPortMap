@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"go.uber.org/ratelimit"
 	"os"
 	"strings"
-	"go.uber.org/ratelimit"
 )
 
 type sliceValue []string
@@ -43,12 +43,13 @@ var (
 	ipFile     string
 	nocolor    bool //彩色打印
 	json       bool
-	tracelog   string //请求日志
-	rstfile    string //文件保存
-	tout	   float64   //timeout
-	nbtscan	   bool
+	tracelog   string  //请求日志
+	rstfile    string  //文件保存
+	tout       float64 //timeout
+	nbtscan    bool
 	limit      int
 	Limiter    ratelimit.Limiter
+	filter     string
 )
 
 /**
@@ -78,8 +79,9 @@ func init() {
 	flag.BoolVar(&json, "json", false, "output json format")
 	flag.StringVar(&tracelog, "tracefile", "", "request log")
 	flag.StringVar(&rstfile, "o", "rst.txt", "success log")
-	flag.Float64Var(&tout,"t",0.5,"tcp connect time out default 0.5 second")
+	flag.Float64Var(&tout, "t", 0.5, "tcp connect time out default 0.5 second")
 	flag.BoolVar(&nbtscan, "nbtscan", false, "get netbios stat by UDP137 in local network")
+	flag.StringVar(&filter, "filter", "", "if the server name match")
 }
 
 type Identification_Packet struct {

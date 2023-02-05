@@ -21,10 +21,11 @@ type Addr struct {
 	port uint64
 }
 
-type NBTScanIPMap struct{
+type NBTScanIPMap struct {
 	sync.Mutex
 	IPS map[string]struct{}
 }
+
 // type Range struct {
 // 	Begin uint64
 // 	End   uint64
@@ -32,7 +33,7 @@ type NBTScanIPMap struct{
 
 var (
 	Writer     output.Writer
-	NBTScanIPs = NBTScanIPMap{IPS:make(map[string]struct{})}
+	NBTScanIPs = NBTScanIPMap{IPS: make(map[string]struct{})}
 )
 
 type Engine struct {
@@ -268,9 +269,9 @@ func (e *Engine) Parser() error {
 
 func CreateEngine() *Engine {
 
-	if limit > 1{
+	if limit > 1 {
 		Limiter = ratelimit.New(limit)
-	}else{
+	} else {
 		Limiter = ratelimit.NewUnlimited()
 	}
 
@@ -280,6 +281,15 @@ func CreateEngine() *Engine {
 		WorkerCount: NumThreads,
 		Wg:          &sync.WaitGroup{},
 	}
+}
+
+func isContain(items []string, item string) bool {
+	for _, eachItem := range items {
+		if eachItem == item {
+			return true
+		}
+	}
+	return false
 }
 
 func nbtscaner(ip string) {
@@ -332,12 +342,27 @@ func scanner(ip string, port uint64) {
 				szOption = fmt.Sprintf("%s%s:%d\r\n\r\n", st_Identification_Packet[0].Packet, ip, port)
 			}
 			packet = []byte(szOption)
-		}else{
+		} else {
 			packet = st_Identification_Packet[i].Packet
 		}
 
 		dwSvc, resultEvent = SendIdentificationPacketFunction(packet, ip, port)
 		if (dwSvc > UNKNOWN_PORT && dwSvc <= SOCKET_CONNECT_FAILED) || dwSvc == SOCKET_READ_TIMEOUT {
+			if filter != "" {
+				var filterList = strings.Split(strings.ToLower(filter), ",")
+				if resultEvent == nil || resultEvent.WorkingEvent == nil {
+					return
+				}
+				var event = resultEvent.WorkingEvent.(Ghttp.Result)
+				if resultEvent.Info.Service == "ssl/tls" {
+					if strings.Index(resultEvent.Info.Cert, "CommonName") != -1 {
+						return
+					}
+				}
+				if !isContain(filterList, strings.ToLower(event.WebServer)) {
+					return
+				}
+			}
 			Writer.Write(resultEvent)
 			return
 		}
@@ -350,10 +375,9 @@ func worker(res chan Addr, wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 
-
 		for addr := range res {
 			//do netbios stat scan
-			if nbtscan && NBTScanIPs.HasIP(addr.ip) == false{
+			if nbtscan && NBTScanIPs.HasIP(addr.ip) == false {
 				NBTScanIPs.SetIP(addr.ip)
 				nbtscaner(addr.ip)
 			}
@@ -373,7 +397,7 @@ func SendIdentificationPacketFunction(data []byte, ip string, port uint64) (int,
 
 	//fmt.Println(addr)
 	var dwSvc int = UNKNOWN_PORT
-	conn, err := net.DialTimeout("tcp", addr, time.Duration(tout * 1000) * time.Millisecond)
+	conn, err := net.DialTimeout("tcp", addr, time.Duration(tout*1000)*time.Millisecond)
 	if err != nil {
 		// 端口是closed状态
 		Writer.Request(ip, conversion.ToString(port), "tcp", fmt.Errorf("time out"))
