@@ -164,9 +164,12 @@ func (e *Engine) Parser() error {
 	if ipFile != "" {
 		rst, err := rc.ParseIPFromFile(ipFile)
 		if err == nil {
+			println(err)
 			for _, r := range rst {
 				e.TaskIps = append(e.TaskIps, r)
 			}
+		} else {
+			println(err.Error())
 		}
 	}
 

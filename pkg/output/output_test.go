@@ -6,13 +6,13 @@ import (
 )
 
 func TestNewStandardWriter(t *testing.T) {
-	writer, err := NewStandardWriter(false, "scan.txt", "trace.log")
-	if err !=nil{
-		t.Logf("new writer error :%s\n",err.Error())
+	writer, err := NewStandardWriter(true, false, "scan.txt", "trace.log")
+	if err != nil {
+		t.Logf("new writer error :%s\n", err.Error())
 	}
 	even := &ResultEvent{
-		Target: "192.168.0.53",
-		Time: time.Now(),
+		Target:       "192.168.0.53",
+		Time:         time.Now(),
 		WorkingEvent: "time out",
 	}
 	writer.Write(even)

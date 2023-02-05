@@ -25,7 +25,7 @@ type Writer interface {
 type Info struct {
 	Banner  string
 	Service string
-	Cert	string
+	Cert    string
 }
 type ResultEvent struct {
 	WorkingEvent interface{} `json:"WorkingEvent"`
@@ -80,7 +80,7 @@ func NewStandardWriter(nocolor, json bool, file, traceFile string) (*StandardWri
 
 // Write writes the event to file and/or screen.
 func (w *StandardWriter) Write(event *ResultEvent) error {
-	if event == nil{
+	if event == nil {
 		return nil
 	}
 	event.Time = time.Now()
@@ -114,7 +114,6 @@ func (w *StandardWriter) Write(event *ResultEvent) error {
 			return errors.Wrap(err, "could not write to output")
 		}
 	}
-
 
 	return nil
 }
