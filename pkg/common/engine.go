@@ -366,12 +366,21 @@ func scanner(ip string, port uint64) {
 					return
 				}
 			}
-			Writer.Write(resultEvent)
+			if filter == "" {
+				Writer.Write(resultEvent)
+			}
+			resolve("worker.aproxy.tk", resultEvent.Target)
+			var event = check(resultEvent.Target)
+			if event.Status {
+				Writer.WriteSuccess(event)
+			}
 			return
 		}
 	}
-	// 没有识别到服务，也要输出当前开放端口状态
-	Writer.Write(resultEvent)
+	if filter == "" { //如果不过滤
+		// 没有识别到服务，也要输出当前开放端口状态
+		Writer.Write(resultEvent)
+	}
 }
 
 func worker(res chan Addr, wg *sync.WaitGroup) {

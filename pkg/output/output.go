@@ -18,6 +18,7 @@ type Writer interface {
 	Close()
 	// Write writes the event to file and/or screen.
 	Write(*ResultEvent) error
+	WriteSuccess(*ResultSuccess) error
 	// Request logs a request in the trace log
 	Request(ip, port, requestType string, err error)
 }
@@ -27,11 +28,19 @@ type Info struct {
 	Service string
 	Cert    string
 }
+
 type ResultEvent struct {
 	WorkingEvent interface{} `json:"WorkingEvent"`
 	Info         *Info       `json:"info,inline"`
 	Time         time.Time   `json:"time"`
 	Target       string      `json:"Target"`
+}
+
+type ResultSuccess struct {
+	Info   string    `json:"info"`
+	Time   time.Time `json:"time"`
+	Target string    `json:"Target"`
+	Status bool
 }
 
 type StandardWriter struct {
@@ -91,6 +100,46 @@ func (w *StandardWriter) Write(event *ResultEvent) error {
 		data, err = w.formatJSON(event)
 	} else {
 		data = w.formatScreen(event)
+	}
+
+	if err != nil {
+		return errors.Wrap(err, "could not format output")
+	}
+	if len(data) == 0 {
+		return nil
+	}
+
+	w.outputMutex.Lock()
+	defer w.outputMutex.Unlock()
+
+	_, _ = w.w.Write(data)
+	_, _ = w.w.Write([]byte("\n"))
+
+	if w.outputFile != nil {
+		if !w.json {
+			data = decolorizerRegex.ReplaceAll(data, []byte(""))
+		}
+		if writeErr := w.outputFile.Write(data); writeErr != nil {
+			return errors.Wrap(err, "could not write to output")
+		}
+	}
+
+	return nil
+}
+
+// Write writes the event to file and/or screen.
+func (w *StandardWriter) WriteSuccess(event *ResultSuccess) error {
+	if event == nil {
+		return nil
+	}
+	event.Time = time.Now()
+
+	var data []byte
+	var err error
+	if w.json {
+		data, err = w.formatSuccessJSON(event)
+	} else {
+		data = w.formatSuccessScreen(event)
 	}
 
 	if err != nil {
