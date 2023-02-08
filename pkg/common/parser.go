@@ -50,6 +50,7 @@ var (
 	limit      int
 	Limiter    ratelimit.Limiter
 	filter     string
+	proto      []string
 )
 
 /**
@@ -67,6 +68,7 @@ func init() {
 	//flag.StringVar(&cmdExPath, "e", "", "set exclude file path")
 	// flag.StringVar(&cmdCofPath, "c", "", "set config file path")
 	flag.Var(newSliceValue([]string{}, &cmdPorts), "p", "set port ranges to scan，default is top100")
+	flag.Var(newSliceValue([]string{}, &proto), "po", "set proto to check")
 
 	flag.BoolVar(&cmdT1000, "t1000", false, "scan top1000 ports")
 	flag.BoolVar(&cmdRandom, "r", false, "random scan flag")

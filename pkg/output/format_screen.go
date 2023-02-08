@@ -54,9 +54,10 @@ func (w *StandardWriter) formatScreen(output *ResultEvent) []byte {
 func (w *StandardWriter) formatSuccessScreen(output *ResultSuccess) []byte {
 	builder := &bytes.Buffer{}
 	builder.WriteString(color.RedString(fmt.Sprintf("%-20s", output.Target)))
-	builder.WriteString(" | ")
-	builder.WriteString(color.GreenString(output.Info))
-	builder.WriteString(" | ")
+	//builder.WriteString(color.RedString(output.Target))
+	builder.WriteString("|pass|")
+	builder.WriteString(color.GreenString(strings.Split(output.Info, "ip is ")[1]))
+	builder.WriteString("|")
 	builder.WriteString(output.Time.Format("2006-01-02 15:04:05"))
 	return builder.Bytes()
 }

@@ -333,9 +333,21 @@ func scanner(ip string, port uint64) {
 	// 发送其他协议查询包
 	for i := 0; i < iPacketMask; i++ {
 		// 超时2次,不再识别
+
 		if bIsIdentification && iRule == i {
 			continue
 		}
+		var isGoing = false
+		for _, v := range proto {
+			if strings.Index(st_Identification_Packet[i].Desc, v) != -1 {
+				isGoing = true
+				break
+			}
+		}
+		if !isGoing {
+			continue
+		}
+
 		if i == 0 {
 			// 说明是http，数据需要拼装一下
 			var szOption string
@@ -352,10 +364,10 @@ func scanner(ip string, port uint64) {
 		dwSvc, resultEvent = SendIdentificationPacketFunction(packet, ip, port)
 		if (dwSvc > UNKNOWN_PORT && dwSvc <= SOCKET_CONNECT_FAILED) || dwSvc == SOCKET_READ_TIMEOUT {
 			if filter != "" {
-				var filterList = strings.Split(strings.ToLower(filter), ",")
 				if resultEvent == nil || resultEvent.WorkingEvent == nil {
 					return
 				}
+				var filterList = strings.Split(strings.ToLower(filter), ",")
 				var event = resultEvent.WorkingEvent.(Ghttp.Result)
 				if resultEvent.Info.Service == "ssl/tls" {
 					if strings.Index(resultEvent.Info.Cert, "CommonName") != -1 {

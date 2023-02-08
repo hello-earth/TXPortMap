@@ -91,8 +91,6 @@ func check(ip string) *output.ResultSuccess {
 			even.Info = text
 			even.Status = true
 		}
-	} else {
-		log.Println(err)
 	}
 	even.Time = time.Now()
 	return even
