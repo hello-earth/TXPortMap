@@ -42,7 +42,7 @@ var (
 	excIps     []string // 待排除Ip
 	ipFile     string
 	nocolor    bool //彩色打印
-	json       bool
+	isJson     bool
 	tracelog   string  //请求日志
 	rstfile    string  //文件保存
 	tout       float64 //timeout
@@ -50,6 +50,7 @@ var (
 	limit      int
 	Limiter    ratelimit.Limiter
 	filter     string
+	testcdn    string
 )
 
 /**
@@ -76,17 +77,22 @@ func init() {
 	flag.Var(newSliceValue([]string{}, &excIps), "ei", "set ip ranges to exclude")
 	flag.StringVar(&ipFile, "l", "", "input ips file")
 	flag.BoolVar(&nocolor, "nocolor", false, "using color ascii to screen")
-	flag.BoolVar(&json, "json", false, "output json format")
+	flag.BoolVar(&isJson, "isJson", false, "output isJson format")
 	flag.StringVar(&tracelog, "tracefile", "", "request log")
 	flag.StringVar(&rstfile, "o", "rst.txt", "success log")
 	flag.Float64Var(&tout, "t", 0.5, "tcp connect time out default 0.5 second")
 	flag.BoolVar(&nbtscan, "nbtscan", false, "get netbios stat by UDP137 in local network")
 	flag.StringVar(&filter, "filter", "", "if the server name match")
+	flag.StringVar(&testcdn, "testcdn", "", "the test domain if going to test cdn")
 }
 
 type Identification_Packet struct {
 	Desc   string
 	Packet []byte
+}
+
+type CountryInfo struct {
+	Iso_code string
 }
 
 var st_Identification_Packet [100]Identification_Packet

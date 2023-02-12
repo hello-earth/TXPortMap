@@ -120,7 +120,7 @@ func (e *Engine) Scheduler() {
 // 参数解析，对命令行中传递的参数进行格式化存储
 func (e *Engine) Parser() error {
 	var err error
-	Writer, err = output.NewStandardWriter(nocolor, json, rstfile, tracelog)
+	Writer, err = output.NewStandardWriter(nocolor, isJson, rstfile, tracelog)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,6 @@ func (e *Engine) Parser() error {
 	if ipFile != "" {
 		rst, err := rc.ParseIPFromFile(ipFile)
 		if err == nil {
-			println(err)
 			for _, r := range rst {
 				e.TaskIps = append(e.TaskIps, r)
 			}
@@ -288,7 +287,7 @@ func CreateEngine() *Engine {
 
 func isContain(items []string, item string) bool {
 	for _, eachItem := range items {
-		if eachItem == item {
+		if strings.Index(item, eachItem) != -1 {
 			return true
 		}
 	}
@@ -305,7 +304,7 @@ func nbtscaner(ip string) {
 	}
 }
 
-func scanner(ip string, port uint64) {
+func scanner(ip string, port uint64) bool {
 	var dwSvc int
 	var iRule = -1
 	var bIsIdentification = false
@@ -327,7 +326,7 @@ func scanner(ip string, port uint64) {
 	}
 	if (dwSvc > UNKNOWN_PORT && dwSvc <= SOCKET_CONNECT_FAILED) || dwSvc == SOCKET_READ_TIMEOUT {
 		Writer.Write(resultEvent)
-		return
+		return false
 	}
 
 	// 发送其他协议查询包
@@ -354,24 +353,27 @@ func scanner(ip string, port uint64) {
 			if filter != "" {
 				var filterList = strings.Split(strings.ToLower(filter), ",")
 				if resultEvent == nil || resultEvent.WorkingEvent == nil {
-					return
+					return false
 				}
 				var event = resultEvent.WorkingEvent.(Ghttp.Result)
 				if resultEvent.Info.Service == "ssl/tls" {
 					if strings.Index(resultEvent.Info.Cert, "CommonName") != -1 {
-						return
+						return false
 					}
 				}
-				if !isContain(filterList, strings.ToLower(event.WebServer)) {
-					return
+				if !isContain(filterList, strings.ToLower(event.ToString())) {
+					return false
 				}
 			}
-			Writer.Write(resultEvent)
-			return
+			if "" == testcdn {
+				Writer.Write(resultEvent)
+			}
+			return true
 		}
 	}
 	// 没有识别到服务，也要输出当前开放端口状态
 	Writer.Write(resultEvent)
+	return false
 }
 
 func worker(res chan Addr, wg *sync.WaitGroup) {
@@ -385,7 +387,13 @@ func worker(res chan Addr, wg *sync.WaitGroup) {
 				nbtscaner(addr.ip)
 			}
 			Limiter.Take()
-			scanner(addr.ip, addr.port)
+			flag := scanner(addr.ip, addr.port)
+			if flag && testcdn != "" {
+				result := checkAvailability(testcdn, fmt.Sprintf("%s:%d", addr.ip, addr.port))
+				if result.Status {
+					Writer.WriteSuccess(result)
+				}
+			}
 		}
 
 	}()
