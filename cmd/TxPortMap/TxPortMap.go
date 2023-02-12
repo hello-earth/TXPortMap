@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	 _ "github.com/projectdiscovery/fdmax/autofdmax"	//Add automatic increase of file descriptors in linux
 	"github.com/4dogs-cn/TXPortMap/pkg/common"
+	_ "github.com/projectdiscovery/fdmax/autofdmax" //Add automatic increase of file descriptors in linux
 	"os"
 )
 
@@ -40,7 +40,6 @@ func main() {
 		os.Exit(1)
 	}
 
-
 	// common.ArgsPrint()
 	//engine.Wg.Add(engine.WorkerCount)
 	//go engine.Scheduler()
@@ -48,7 +47,7 @@ func main() {
 
 	// 等待扫描任务完成
 	engine.Wg.Wait()
-	if common.Writer !=nil{
+	if common.Writer != nil {
 		common.Writer.Close()
 	}
 }
