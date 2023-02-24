@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/4dogs-cn/TXPortMap/pkg/Ginfo/Ghttp"
 	"github.com/4dogs-cn/TXPortMap/pkg/Ginfo/Gnbtscan"
@@ -11,6 +12,8 @@ import (
 	"go.uber.org/ratelimit"
 	"io"
 	"net"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +63,15 @@ func (r *NBTScanIPMap) HasIP(ip string) bool {
 
 	_, ok := r.IPS[ip]
 	return ok
+}
+
+func goID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
 }
 
 var WorkingCount int
@@ -122,8 +134,8 @@ func (e *Engine) SchedulerProxy() {
 	if testcdn == "" {
 		return
 	}
-	for i := 0; i < 10; i++ {
-		cdntester(e.ProxyChan, e.PWg)
+	for i := 0; i < 25; i++ {
+		CdnTester(e.ProxyChan, e.PWg)
 	}
 }
 
@@ -411,7 +423,7 @@ func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup) {
 	}()
 }
 
-func cdntester(res chan Addr, pwg *sync.WaitGroup) {
+func CdnTester(res chan Addr, pwg *sync.WaitGroup) {
 	pwg.Add(1)
 	go func() {
 		defer pwg.Done()
@@ -420,7 +432,7 @@ func cdntester(res chan Addr, pwg *sync.WaitGroup) {
 			if result.Status {
 				Writer.WriteSuccess(result)
 			} else {
-				println(fmt.Sprintf("%s:%d not available", addr.ip, addr.port))
+				println(fmt.Sprintf("%s:%d not available [%d, %d] %s", addr.ip, addr.port, goID(), len(res), time.Now().Format("15:04:05")))
 			}
 		}
 	}()

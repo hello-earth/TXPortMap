@@ -33,7 +33,7 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 
 	dialer := &net.Dialer{
 		Timeout:   3 * time.Second,
-		KeepAlive: 3 * time.Second,
+		KeepAlive: 1 * time.Second,
 		// DualStack: true, // this is deprecated as of go 1.16
 		// or create your own transport, there's an example on godoc.
 	}
