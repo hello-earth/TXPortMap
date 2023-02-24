@@ -35,14 +35,15 @@ var (
 )
 
 type Engine struct {
-	TaskIps     []rc.Range
-	TaskPorts   []rc.Range
-	ExcdPorts   []rc.Range // 待排除端口
-	ExcdIps     []rc.Range // 待排除的Ip
-	RandomFlag  bool
-	WorkerCount int
-	TaskChan    chan Addr // 传递待扫描的ip端口对
-	ProxyChan   chan Addr // 传递待扫描的ip端口对
+	TaskIps      []rc.Range
+	TaskPorts    []rc.Range
+	ExcdPorts    []rc.Range // 待排除端口
+	ExcdIps      []rc.Range // 待排除的Ip
+	RandomFlag   bool
+	WorkerCount  int
+	PWorkerCount int
+	TaskChan     chan Addr // 传递待扫描的ip端口对
+	ProxyChan    chan Addr // 传递待扫描的ip端口对
 	//DoneChan chan struct{}  // 任务完成通知
 	Wg  *sync.WaitGroup
 	PWg *sync.WaitGroup
@@ -73,8 +74,6 @@ func goID() uint64 {
 	n, _ := strconv.ParseUint(string(b), 10, 64)
 	return n
 }
-
-var WorkingCount int
 
 // 扫描目标建立，ip:port发送到任务通道
 func (e *Engine) Run() {
@@ -127,14 +126,13 @@ func (e *Engine) Scheduler() {
 	for i := 0; i < e.WorkerCount; i++ {
 		worker(e.TaskChan, e.ProxyChan, e.Wg)
 	}
-	WorkingCount = e.WorkerCount
 }
 
 func (e *Engine) SchedulerProxy() {
 	if testcdn == "" {
 		return
 	}
-	for i := 0; i < e.WorkerCount/3; i++ {
+	for i := 0; i < e.PWorkerCount; i++ {
 		CdnTester(e.ProxyChan, e.PWg)
 	}
 }
@@ -299,15 +297,14 @@ func CreateEngine() *Engine {
 		Limiter = ratelimit.NewUnlimited()
 	}
 
-	WorkingCount = NumThreads
-
 	return &Engine{
-		RandomFlag:  cmdRandom,
-		TaskChan:    make(chan Addr, 1000),
-		ProxyChan:   make(chan Addr, 1000),
-		WorkerCount: NumThreads,
-		Wg:          &sync.WaitGroup{},
-		PWg:         &sync.WaitGroup{},
+		RandomFlag:   cmdRandom,
+		TaskChan:     make(chan Addr, 1000),
+		ProxyChan:    make(chan Addr, 100),
+		WorkerCount:  NumThreads,
+		PWorkerCount: NumThreads / 3,
+		Wg:           &sync.WaitGroup{},
+		PWg:          &sync.WaitGroup{},
 	}
 }
 
@@ -418,14 +415,15 @@ func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup) {
 			flag := scanner(addr.ip, addr.port)
 			if flag && testcdn != "" {
 				pChan <- addr
+				println(fmt.Sprintf("%s:%d is scaned [%d, %d, %d] %s", addr.ip, addr.port, goID(), len(res), len(pChan), time.Now().Format("15:04:05")))
 			}
 		}
 	}()
 }
 
 func CdnTester(res chan Addr, pwg *sync.WaitGroup) {
-	pwg.Add(1)
 	go func() {
+		pwg.Add(1)
 		defer pwg.Done()
 		for addr := range res {
 			result := checkAvailability(testcdn, fmt.Sprintf("%s:%d", addr.ip, addr.port))

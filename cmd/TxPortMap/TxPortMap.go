@@ -6,6 +6,7 @@ import (
 	"github.com/4dogs-cn/TXPortMap/pkg/common"
 	_ "github.com/projectdiscovery/fdmax/autofdmax" //Add automatic increase of file descriptors in linux
 	"os"
+	"time"
 )
 
 func init() {
@@ -47,8 +48,18 @@ func main() {
 
 	// 等待扫描任务完成
 	engine.Wg.Wait()
+	println("scan task finish, waiting for cdn test task complete")
 	close(engine.ProxyChan)
+
+	timer := time.NewTimer(time.Second * 600)
+
+	select {
+	case <-timer.C:
+		panic("it take too long time for complete, i can not wait anymore!!!")
+	}
 	engine.PWg.Wait()
+	timer.Stop()
+
 	if common.Writer != nil {
 		common.Writer.Close()
 	}

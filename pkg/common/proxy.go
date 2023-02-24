@@ -20,22 +20,19 @@ func defaultCheckRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+var dialer = &net.Dialer{
+	Timeout:   3 * time.Second,
+	KeepAlive: 1 * time.Second,
+	// DualStack: true, // this is deprecated as of go 1.16
+	// or create your own transport, there's an example on godoc.
+}
+
 func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 	even := &output.ResultSuccess{
 		Target:  maddr,
 		StepIP:  "",
 		Country: "",
 		Status:  false,
-	}
-	maddr_arr := strings.Split(maddr, ":")
-	ip := maddr_arr[0]
-	port := maddr_arr[1]
-
-	dialer := &net.Dialer{
-		Timeout:   3 * time.Second,
-		KeepAlive: 1 * time.Second,
-		// DualStack: true, // this is deprecated as of go 1.16
-		// or create your own transport, there's an example on godoc.
 	}
 
 	tr := &http.Transport{
@@ -51,6 +48,9 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 	client := &http.Client{Transport: tr}
 	client.CheckRedirect = defaultCheckRedirect
 
+	maddr_arr := strings.Split(maddr, ":")
+	ip := maddr_arr[0]
+	port := maddr_arr[1]
 	resp, err := client.Get("https://" + domain + ":" + port + "/ip")
 	if err == nil {
 		body, _ := ioutil.ReadAll(resp.Body)
