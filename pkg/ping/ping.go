@@ -13,7 +13,7 @@ func Ping(dstIP string, count int) int64 {
 	}
 	pinger, err := ping.NewPinger(dstIP)
 	if err != nil {
-		panic(err)
+		return 9999
 	}
 	pinger.Count = count
 	pinger.SetPrivileged(true)
@@ -27,7 +27,6 @@ func Ping(dstIP string, count int) int64 {
 	pinger.Timeout = 2 * time.Second
 	err = pinger.Run()
 	if err != nil {
-		panic(err)
 		return 9999
 	}
 	stats := pinger.Statistics()

@@ -134,7 +134,7 @@ func (e *Engine) SchedulerProxy() {
 	if testcdn == "" {
 		return
 	}
-	for i := 0; i < 25; i++ {
+	for i := 0; i < e.WorkerCount/3; i++ {
 		CdnTester(e.ProxyChan, e.PWg)
 	}
 }
