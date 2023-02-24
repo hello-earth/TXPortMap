@@ -7,12 +7,18 @@ import (
 	"github.com/4dogs-cn/TXPortMap/pkg/ping"
 	"golang.org/x/net/context"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 )
+
+func defaultCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 1 {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
 
 func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 	even := &output.ResultSuccess{
@@ -27,7 +33,7 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 
 	dialer := &net.Dialer{
 		Timeout:   3 * time.Second,
-		KeepAlive: 30 * time.Second,
+		KeepAlive: 3 * time.Second,
 		// DualStack: true, // this is deprecated as of go 1.16
 		// or create your own transport, there's an example on godoc.
 	}
@@ -41,7 +47,10 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 			return dialer.DialContext(ctx, network, addr)
 		},
 	}
+
 	client := &http.Client{Transport: tr}
+	client.CheckRedirect = defaultCheckRedirect
+
 	resp, err := client.Get("https://" + domain + ":" + port + "/ip")
 	if err == nil {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -49,6 +58,7 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 			var text = string(body)
 			if strings.Index(text, "request success your ip is") != -1 {
 				even.StepIP = strings.Split(text, "your ip is ")[1]
+				even.Status = true
 				resp, err = http.Get("http://geoip.apie.cc/index.php?security=CUe36wCk28cVw2&ip=" + ip)
 				if err == nil {
 					body, _ := ioutil.ReadAll(resp.Body)
@@ -59,11 +69,8 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 					}
 				}
 				even.Ping = ping.Ping(ip, 2)
-				even.Status = even.Ping != 0 && even.Ping < 500
 			}
 		}
-	} else {
-		log.Println(err)
 	}
 	even.Time = time.Now()
 	return even

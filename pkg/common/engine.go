@@ -26,11 +26,6 @@ type NBTScanIPMap struct {
 	IPS map[string]struct{}
 }
 
-// type Range struct {
-// 	Begin uint64
-// 	End   uint64
-// }
-
 var (
 	Writer     output.Writer
 	NBTScanIPs = NBTScanIPMap{IPS: make(map[string]struct{})}
@@ -44,8 +39,10 @@ type Engine struct {
 	RandomFlag  bool
 	WorkerCount int
 	TaskChan    chan Addr // 传递待扫描的ip端口对
+	ProxyChan   chan Addr // 传递待扫描的ip端口对
 	//DoneChan chan struct{}  // 任务完成通知
-	Wg *sync.WaitGroup
+	Wg  *sync.WaitGroup
+	PWg *sync.WaitGroup
 }
 
 // SetIP as seen
@@ -65,11 +62,14 @@ func (r *NBTScanIPMap) HasIP(ip string) bool {
 	return ok
 }
 
+var WorkingCount int
+
 // 扫描目标建立，ip:port发送到任务通道
 func (e *Engine) Run() {
 	var addr Addr
 	e.Wg.Add(e.WorkerCount)
 	go e.Scheduler()
+	go e.SchedulerProxy()
 
 	// fmt.Println(e.TaskPorts)
 
@@ -113,7 +113,17 @@ func (e *Engine) SubmitTask(addr Addr) {
 // 扫描任务创建
 func (e *Engine) Scheduler() {
 	for i := 0; i < e.WorkerCount; i++ {
-		worker(e.TaskChan, e.Wg)
+		worker(e.TaskChan, e.ProxyChan, e.Wg)
+	}
+	WorkingCount = e.WorkerCount
+}
+
+func (e *Engine) SchedulerProxy() {
+	if testcdn == "" {
+		return
+	}
+	for i := 0; i < 10; i++ {
+		cdntester(e.ProxyChan, e.PWg)
 	}
 }
 
@@ -277,11 +287,15 @@ func CreateEngine() *Engine {
 		Limiter = ratelimit.NewUnlimited()
 	}
 
+	WorkingCount = NumThreads
+
 	return &Engine{
 		RandomFlag:  cmdRandom,
 		TaskChan:    make(chan Addr, 1000),
+		ProxyChan:   make(chan Addr, 1000),
 		WorkerCount: NumThreads,
 		Wg:          &sync.WaitGroup{},
+		PWg:         &sync.WaitGroup{},
 	}
 }
 
@@ -371,12 +385,14 @@ func scanner(ip string, port uint64) bool {
 			return true
 		}
 	}
-	// 没有识别到服务，也要输出当前开放端口状态
-	Writer.Write(resultEvent)
+	if filter == "" {
+		// 没有识别到服务，也要输出当前开放端口状态
+		Writer.Write(resultEvent)
+	}
 	return false
 }
 
-func worker(res chan Addr, wg *sync.WaitGroup) {
+func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 
@@ -389,13 +405,24 @@ func worker(res chan Addr, wg *sync.WaitGroup) {
 			Limiter.Take()
 			flag := scanner(addr.ip, addr.port)
 			if flag && testcdn != "" {
-				result := checkAvailability(testcdn, fmt.Sprintf("%s:%d", addr.ip, addr.port))
-				if result.Status {
-					Writer.WriteSuccess(result)
-				}
+				pChan <- addr
 			}
 		}
+	}()
+}
 
+func cdntester(res chan Addr, pwg *sync.WaitGroup) {
+	pwg.Add(1)
+	go func() {
+		defer pwg.Done()
+		for addr := range res {
+			result := checkAvailability(testcdn, fmt.Sprintf("%s:%d", addr.ip, addr.port))
+			if result.Status {
+				Writer.WriteSuccess(result)
+			} else {
+				println(fmt.Sprintf("%s:%d not available", addr.ip, addr.port))
+			}
+		}
 	}()
 }
 

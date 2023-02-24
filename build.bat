@@ -8,3 +8,8 @@ go build -ldflags "-s -w" -trimpath -o release/TxPortMap_windows_x64.exe cmd/TxP
 
 set GOOS=darwin
 go build -ldflags "-s -w" -trimpath -o release/TxPortMap_macos_x64 cmd/TxPortMap/TxPortMap.go
+
+set GOARCH=arm64
+
+set GOOS=linux
+go build -ldflags "-s -w" -trimpath -o release/TxPortMap_linux_arm64 cmd/TxPortMap/TxPortMap.go
