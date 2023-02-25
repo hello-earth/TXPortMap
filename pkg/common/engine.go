@@ -75,6 +75,13 @@ func goID() uint64 {
 	return n
 }
 
+func Max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
+}
+
 // 扫描目标建立，ip:port发送到任务通道
 func (e *Engine) Run() {
 	var addr Addr
@@ -302,7 +309,7 @@ func CreateEngine() *Engine {
 		TaskChan:     make(chan Addr, 1000),
 		ProxyChan:    make(chan Addr, 100),
 		WorkerCount:  NumThreads,
-		PWorkerCount: NumThreads / 3,
+		PWorkerCount: Max(NumThreads/3, 200),
 		Wg:           &sync.WaitGroup{},
 		PWg:          &sync.WaitGroup{},
 	}
