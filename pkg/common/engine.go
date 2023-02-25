@@ -106,6 +106,7 @@ func (e *Engine) Run() {
 					//e.SubmitTask(addr)
 					//fmt.Println("ip:",ip,":port",port)
 					e.TaskChan <- addr
+					e.JobCount += 1
 				}
 			}
 		}
@@ -287,7 +288,6 @@ func (e *Engine) Parser() error {
 
 	// fmt.Println(e.TaskPorts)
 	// fmt.Println(e.ExcdPorts)
-	e.JobCount = e.ipRangeCount()
 
 	return nil
 }
@@ -419,7 +419,7 @@ func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup, completeJobCount
 			if flag && testcdn != "" {
 				pChan <- addr
 			}
-			*completeJobCount += uint64(1)
+			*completeJobCount += 1
 		}
 	}()
 }
