@@ -14,7 +14,7 @@ import (
 )
 
 func defaultCheckRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= 1 {
+	if len(via) >= 3 {
 		return http.ErrUseLastResponse
 	}
 	return nil
@@ -53,8 +53,8 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 	port := maddr_arr[1]
 	resp, err := client.Get("https://" + domain + ":" + port + "/ip")
 	if err == nil {
-		body, _ := ioutil.ReadAll(resp.Body)
-		if len(body) > 0 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err == nil {
 			var text = string(body)
 			if strings.Index(text, "request success your ip is") != -1 {
 				even.StepIP = strings.Split(text, "your ip is ")[1]

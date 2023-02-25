@@ -35,15 +35,17 @@ var (
 )
 
 type Engine struct {
-	TaskIps      []rc.Range
-	TaskPorts    []rc.Range
-	ExcdPorts    []rc.Range // 待排除端口
-	ExcdIps      []rc.Range // 待排除的Ip
-	RandomFlag   bool
-	WorkerCount  int
-	PWorkerCount int
-	TaskChan     chan Addr // 传递待扫描的ip端口对
-	ProxyChan    chan Addr // 传递待扫描的ip端口对
+	TaskIps          []rc.Range
+	TaskPorts        []rc.Range
+	ExcdPorts        []rc.Range // 待排除端口
+	ExcdIps          []rc.Range // 待排除的Ip
+	RandomFlag       bool
+	WorkerCount      int
+	PWorkerCount     int
+	JobCount         uint64
+	CompleteJobCount uint64
+	TaskChan         chan Addr // 传递待扫描的ip端口对
+	ProxyChan        chan Addr // 传递待扫描的ip端口对
 	//DoneChan chan struct{}  // 任务完成通知
 	Wg  *sync.WaitGroup
 	PWg *sync.WaitGroup
@@ -91,26 +93,19 @@ func (e *Engine) Run() {
 
 	// fmt.Println(e.TaskPorts)
 
-	// TODO:: if !e.RandomFlag
-	if !e.RandomFlag {
-		// 随机扫描，向任务通道随机发送addr
-		e.randomScan()
+	// 顺序扫描，向任务通道顺序发送addr
+	for _, ipnum := range e.TaskIps {
+		for ips := ipnum.Begin; ips <= ipnum.End; ips++ {
+			ip := ps.UnParseIPv4(ips)
 
-	} else {
-		// 顺序扫描，向任务通道顺序发送addr
-		for _, ipnum := range e.TaskIps {
-			for ips := ipnum.Begin; ips <= ipnum.End; ips++ {
-				ip := ps.UnParseIPv4(ips)
+			for _, ports := range e.TaskPorts {
+				for port := ports.Begin; port <= ports.End; port++ {
+					addr.ip = ip
+					addr.port = port
 
-				for _, ports := range e.TaskPorts {
-					for port := ports.Begin; port <= ports.End; port++ {
-						addr.ip = ip
-						addr.port = port
-
-						//e.SubmitTask(addr)
-						//fmt.Println("ip:",ip,":port",port)
-						e.TaskChan <- addr
-					}
+					//e.SubmitTask(addr)
+					//fmt.Println("ip:",ip,":port",port)
+					e.TaskChan <- addr
 				}
 			}
 		}
@@ -131,7 +126,7 @@ func (e *Engine) SubmitTask(addr Addr) {
 // 扫描任务创建
 func (e *Engine) Scheduler() {
 	for i := 0; i < e.WorkerCount; i++ {
-		worker(e.TaskChan, e.ProxyChan, e.Wg)
+		worker(e.TaskChan, e.ProxyChan, e.Wg, &e.CompleteJobCount)
 	}
 }
 
@@ -140,7 +135,7 @@ func (e *Engine) SchedulerProxy() {
 		return
 	}
 	for i := 0; i < e.PWorkerCount; i++ {
-		CdnTester(e.ProxyChan, e.PWg)
+		CdnTester(e.ProxyChan, e.TaskChan, e.PWg, e.JobCount, &e.CompleteJobCount)
 	}
 }
 
@@ -292,6 +287,7 @@ func (e *Engine) Parser() error {
 
 	// fmt.Println(e.TaskPorts)
 	// fmt.Println(e.ExcdPorts)
+	e.JobCount = e.ipRangeCount()
 
 	return nil
 }
@@ -309,7 +305,7 @@ func CreateEngine() *Engine {
 		TaskChan:     make(chan Addr, 1000),
 		ProxyChan:    make(chan Addr, 100),
 		WorkerCount:  NumThreads,
-		PWorkerCount: Max(NumThreads/3, 200),
+		PWorkerCount: 200,
 		Wg:           &sync.WaitGroup{},
 		PWg:          &sync.WaitGroup{},
 	}
@@ -408,7 +404,7 @@ func scanner(ip string, port uint64) bool {
 	return false
 }
 
-func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup) {
+func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup, completeJobCount *uint64) {
 	go func() {
 		defer wg.Done()
 
@@ -422,13 +418,13 @@ func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup) {
 			flag := scanner(addr.ip, addr.port)
 			if flag && testcdn != "" {
 				pChan <- addr
-				println(fmt.Sprintf("%s:%d is scaned [%d, %d, %d] %s", addr.ip, addr.port, goID(), len(res), len(pChan), time.Now().Format("15:04:05")))
 			}
+			*completeJobCount += uint64(1)
 		}
 	}()
 }
 
-func CdnTester(res chan Addr, pwg *sync.WaitGroup) {
+func CdnTester(res chan Addr, tres chan Addr, pwg *sync.WaitGroup, jobCount uint64, completeJobCount *uint64) {
 	go func() {
 		pwg.Add(1)
 		defer pwg.Done()
@@ -437,7 +433,7 @@ func CdnTester(res chan Addr, pwg *sync.WaitGroup) {
 			if result.Status {
 				Writer.WriteSuccess(result)
 			} else {
-				println(fmt.Sprintf("%s:%d not available [%d, %d] %s", addr.ip, addr.port, goID(), len(res), time.Now().Format("15:04:05")))
+				println(fmt.Sprintf("%s:%d not available [%d, %d, %d, %d] %s", addr.ip, addr.port, goID(), len(res), len(tres), jobCount-*completeJobCount, time.Now().Format("15:04:05")))
 			}
 		}
 	}()
@@ -535,36 +531,6 @@ func SendIdentificationPacketFunction(data []byte, ip string, port uint64) (int,
 	}
 
 	return dwSvc, even
-}
-
-// randomScan 随机扫描, 有问题，扫描C段时扫描不到，
-// TODO::尝试遍历ip，端口顺序打乱扫描
-func (e *Engine) randomScan() {
-	// 投机取巧，打乱端口顺序，遍历ip扫描
-	var portlist = make(map[int]uint64)
-	var index int
-	var addr Addr
-
-	for _, ports := range e.TaskPorts {
-		for port := ports.Begin; port <= ports.End; port++ {
-			portlist[index] = port
-			index++
-		}
-	}
-
-	for _, ipnum := range e.TaskIps {
-		for ips := ipnum.Begin; ips <= ipnum.End; ips++ {
-			ip := ps.UnParseIPv4(ips)
-			for _, po := range portlist {
-				addr.ip = ip
-				addr.port = po
-
-				e.TaskChan <- addr
-			}
-			// fmt.Printf("%d ", po)
-		}
-	}
-
 }
 
 // 统计待扫描的ip数目

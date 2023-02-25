@@ -14,8 +14,8 @@ func init() {
 
 	// fmt.Println("threadnum: ", common.NumThreads)
 
-	if common.NumThreads < 1 || common.NumThreads > 2000 {
-		fmt.Println("number of goroutine must between 1 and 2000")
+	if common.NumThreads < 1 || common.NumThreads > 3000 {
+		fmt.Println("number of goroutine must between 1 and 3000")
 		os.Exit(-1)
 	}
 }
@@ -51,7 +51,7 @@ func main() {
 	println("scan task finish, waiting for cdn test task complete")
 	close(engine.ProxyChan)
 
-	timer := time.NewTimer(time.Second * 600)
+	timer := time.NewTimer(time.Second * 300)
 
 	select {
 	case <-timer.C:
