@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -41,6 +42,7 @@ type ResultSuccess struct {
 	Country string    `json:"country"`
 	Time    time.Time `json:"time"`
 	Target  string    `json:"target"`
+	Domain  string    `json:"domain"`
 	Ping    int64     `json:"ping"`
 	Status  bool
 }
@@ -48,7 +50,7 @@ type ResultSuccess struct {
 type StandardWriter struct {
 	w           io.Writer
 	json        bool
-	outputFile  *fileWriter
+	outputFile  map[string]*fileWriter
 	outputMutex *sync.Mutex
 	traceFile   *fileWriter
 	traceMutex  *sync.Mutex
@@ -56,19 +58,36 @@ type StandardWriter struct {
 
 var decolorizerRegex = regexp.MustCompile(`\x1B\[[0-9;]*[a-zA-Z]`)
 
-func NewStandardWriter(nocolor, json bool, file, traceFile string) (*StandardWriter, error) {
+func NewStandardWriter(nocolor, json bool, file string, traceFile string, cdnname []string) (*StandardWriter, error) {
 	w := ansicolor.NewAnsiColorWriter(os.Stdout)
 	if nocolor {
 		color.NoColor = true
 	}
-	var outputFile *fileWriter
+	var outfilemap map[string]*fileWriter = make(map[string]*fileWriter)
 	if file != "" {
-		output, err := newFileOutputWriter(file)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not create output file")
-
+		if len(cdnname) > 0 {
+			output, err := newFileOutputWriter("./rst.txt")
+			if err != nil {
+				return nil, errors.Wrap(err, "could not create output file")
+			}
+			outfilemap["default"] = output
+			var dfile = file
+			for i := range cdnname {
+				file = strings.Replace(dfile, ".txt", "", 1)
+				file = file + "-" + cdnname[i] + ".txt"
+				output, err := newFileOutputWriter(file)
+				if err != nil {
+					return nil, errors.Wrap(err, "could not create output file")
+				}
+				outfilemap[cdnname[i]] = output
+			}
+		} else {
+			output, err := newFileOutputWriter(file)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not create output file")
+			}
+			outfilemap["default"] = output
 		}
-		outputFile = output
 	}
 	var traceOutput *fileWriter
 	if traceFile != "" {
@@ -81,7 +100,7 @@ func NewStandardWriter(nocolor, json bool, file, traceFile string) (*StandardWri
 	writer := &StandardWriter{
 		w:           w,
 		json:        json,
-		outputFile:  outputFile,
+		outputFile:  outfilemap,
 		outputMutex: &sync.Mutex{},
 		traceFile:   traceOutput,
 		traceMutex:  &sync.Mutex{},
@@ -121,7 +140,7 @@ func (w *StandardWriter) Write(event *ResultEvent) error {
 		if !w.json {
 			data = decolorizerRegex.ReplaceAll(data, []byte(""))
 		}
-		if writeErr := w.outputFile.Write(data); writeErr != nil {
+		if writeErr := w.outputFile["default"].Write(data); writeErr != nil {
 			return errors.Wrap(err, "could not write to output")
 		}
 	}
@@ -161,7 +180,7 @@ func (w *StandardWriter) WriteSuccess(event *ResultSuccess) error {
 		if !w.json {
 			data = decolorizerRegex.ReplaceAll(data, []byte(""))
 		}
-		if writeErr := w.outputFile.Write(data); writeErr != nil {
+		if writeErr := w.outputFile[strings.ToLower(event.Domain)].Write(data); writeErr != nil {
 			return errors.Wrap(err, "could not write to output")
 		}
 	}
@@ -171,7 +190,9 @@ func (w *StandardWriter) WriteSuccess(event *ResultSuccess) error {
 
 func (w *StandardWriter) Close() {
 	if w.outputFile != nil {
-		w.outputFile.Close()
+		for i := range w.outputFile {
+			w.outputFile[i].Close()
+		}
 	}
 	if w.traceFile != nil {
 		w.traceFile.Close()

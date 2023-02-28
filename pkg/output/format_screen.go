@@ -61,6 +61,10 @@ func (w *StandardWriter) formatSuccessScreen(output *ResultSuccess) []byte {
 	builder.WriteString(" | ")
 	builder.WriteString(color.BlueString(fmt.Sprintf("%dms", output.Ping)))
 	builder.WriteString(" | ")
+	if output.Domain != "" {
+		builder.WriteString(color.MagentaString(output.Domain))
+		builder.WriteString(" | ")
+	}
 	builder.WriteString(output.Time.Format("2006-01-02 15:04:05"))
 	return builder.Bytes()
 }

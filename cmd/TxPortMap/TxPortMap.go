@@ -48,15 +48,13 @@ func main() {
 
 	// 等待扫描任务完成
 	engine.Wg.Wait()
-	println("scan task finish, waiting for cdn test task complete")
 	close(engine.ProxyChan)
 
-	timer := time.NewTimer(time.Second * 300)
-
-	select {
-	case <-timer.C:
+	timer := time.NewTimer(time.Second * 60)
+	go func() {
+		_ = <-timer.C
 		panic("it take too long time for complete, i can not wait anymore!!!")
-	}
+	}()
 	engine.PWg.Wait()
 	timer.Stop()
 

@@ -50,7 +50,7 @@ var (
 	limit      int
 	Limiter    ratelimit.Limiter
 	filter     string
-	testcdn    string
+	testcdn    bool
 )
 
 /**
@@ -83,7 +83,7 @@ func init() {
 	flag.Float64Var(&tout, "t", 0.5, "tcp connect time out default 0.5 second")
 	flag.BoolVar(&nbtscan, "nbtscan", false, "get netbios stat by UDP137 in local network")
 	flag.StringVar(&filter, "filter", "", "if the server name match")
-	flag.StringVar(&testcdn, "testcdn", "", "the test domain if going to test cdn")
+	flag.BoolVar(&testcdn, "testcdn", false, "if going to test cdn")
 }
 
 type Identification_Packet struct {
@@ -107,7 +107,6 @@ func init() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-
 		st_Identification_Packet[i].Desc = szinfo[0]
 		st_Identification_Packet[i].Packet = data
 	}

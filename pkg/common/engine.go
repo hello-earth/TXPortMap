@@ -20,8 +20,10 @@ import (
 )
 
 type Addr struct {
-	ip   string
-	port uint64
+	ip        string
+	port      uint64
+	WebServer string
+	domain    string
 }
 
 type NBTScanIPMap struct {
@@ -33,6 +35,8 @@ var (
 	Writer     output.Writer
 	NBTScanIPs = NBTScanIPMap{IPS: make(map[string]struct{})}
 )
+
+var domain map[string]string = make(map[string]string)
 
 type Engine struct {
 	TaskIps          []rc.Range
@@ -75,13 +79,6 @@ func goID() uint64 {
 	b = b[:bytes.IndexByte(b, ' ')]
 	n, _ := strconv.ParseUint(string(b), 10, 64)
 	return n
-}
-
-func Max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
 }
 
 // 扫描目标建立，ip:port发送到任务通道
@@ -132,18 +129,34 @@ func (e *Engine) Scheduler() {
 }
 
 func (e *Engine) SchedulerProxy() {
-	if testcdn == "" {
+	if !testcdn {
 		return
 	}
 	for i := 0; i < e.PWorkerCount; i++ {
-		CdnTester(e.ProxyChan, e.TaskChan, e.PWg, e.JobCount, &e.CompleteJobCount)
+		CdnTester(e.ProxyChan, e.PWg, e.JobCount, &e.CompleteJobCount)
 	}
+}
+
+func getKeys(m map[string]string) []string {
+	// 数组默认长度为map长度,后面append时,不需要重新申请内存和拷贝,效率很高
+	j := 0
+	keys := make([]string, len(m))
+	for k := range m {
+		keys[j] = k
+		j++
+	}
+	return keys
 }
 
 // 参数解析，对命令行中传递的参数进行格式化存储
 func (e *Engine) Parser() error {
 	var err error
-	Writer, err = output.NewStandardWriter(nocolor, isJson, rstfile, tracelog)
+	var cndname []string
+	if testcdn {
+		cndname = getKeys(domain)
+	}
+
+	Writer, err = output.NewStandardWriter(nocolor, isJson, rstfile, tracelog, cndname)
 	if err != nil {
 		return err
 	}
@@ -300,6 +313,9 @@ func CreateEngine() *Engine {
 		Limiter = ratelimit.NewUnlimited()
 	}
 
+	domain["cloudflare"] = "worker.aproxy.tk"
+	domain["cloudfront"] = "pod.ffff.gq"
+
 	return &Engine{
 		RandomFlag:   cmdRandom,
 		TaskChan:     make(chan Addr, 1000),
@@ -330,7 +346,7 @@ func nbtscaner(ip string) {
 	}
 }
 
-func scanner(ip string, port uint64) bool {
+func scanner(ip string, port uint64) *output.ResultEvent {
 	var dwSvc int
 	var iRule = -1
 	var bIsIdentification = false
@@ -345,20 +361,24 @@ func scanner(ip string, port uint64) bool {
 			bIsIdentification = true
 			iRule = svc.Identification_RuleId
 			data := st_Identification_Packet[iRule].Packet
-
 			dwSvc, resultEvent = SendIdentificationPacketFunction(data, ip, port)
 			break
 		}
 	}
 	if (dwSvc > UNKNOWN_PORT && dwSvc <= SOCKET_CONNECT_FAILED) || dwSvc == SOCKET_READ_TIMEOUT {
 		Writer.Write(resultEvent)
-		return false
+		return nil
 	}
+
+	var filterList = strings.Split(strings.ToLower(filter), ",")
 
 	// 发送其他协议查询包
 	for i := 0; i < iPacketMask; i++ {
 		// 超时2次,不再识别
 		if bIsIdentification && iRule == i {
+			continue
+		}
+		if filter != "" && !isContain(filterList, strings.ToLower(st_Identification_Packet[i].Desc)) {
 			continue
 		}
 		if i == 0 {
@@ -376,38 +396,30 @@ func scanner(ip string, port uint64) bool {
 
 		dwSvc, resultEvent = SendIdentificationPacketFunction(packet, ip, port)
 		if (dwSvc > UNKNOWN_PORT && dwSvc <= SOCKET_CONNECT_FAILED) || dwSvc == SOCKET_READ_TIMEOUT {
-			if filter != "" {
-				var filterList = strings.Split(strings.ToLower(filter), ",")
-				if resultEvent == nil || resultEvent.WorkingEvent == nil {
-					return false
-				}
-				var event = resultEvent.WorkingEvent.(Ghttp.Result)
-				if resultEvent.Info.Service == "ssl/tls" {
-					if strings.Index(resultEvent.Info.Cert, "CommonName") != -1 {
-						return false
-					}
-				}
-				if !isContain(filterList, strings.ToLower(event.ToString())) {
-					return false
+			if resultEvent == nil || resultEvent.WorkingEvent == nil {
+				return nil
+			}
+			if resultEvent.Info.Service == "ssl/tls" {
+				if strings.Index(resultEvent.Info.Cert, "CommonName") != -1 {
+					return nil
 				}
 			}
-			if "" == testcdn {
+			if !testcdn {
 				Writer.Write(resultEvent)
 			}
-			return true
+			return resultEvent
 		}
 	}
 	if filter == "" {
 		// 没有识别到服务，也要输出当前开放端口状态
 		Writer.Write(resultEvent)
 	}
-	return false
+	return nil
 }
 
 func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup, completeJobCount *uint64) {
 	go func() {
 		defer wg.Done()
-
 		for addr := range res {
 			//do netbios stat scan
 			if nbtscan && NBTScanIPs.HasIP(addr.ip) == false {
@@ -415,25 +427,32 @@ func worker(res chan Addr, pChan chan Addr, wg *sync.WaitGroup, completeJobCount
 				nbtscaner(addr.ip)
 			}
 			Limiter.Take()
-			flag := scanner(addr.ip, addr.port)
-			if flag && testcdn != "" {
-				pChan <- addr
+			resultEvent := scanner(addr.ip, addr.port)
+			if resultEvent != nil && testcdn {
+				var event = resultEvent.WorkingEvent.(Ghttp.Result)
+				addr.WebServer = event.WebServer
+				domain, ok := domain[strings.ToLower(event.WebServer)]
+				if ok {
+					addr.domain = domain
+					pChan <- addr
+				}
 			}
 			*completeJobCount += 1
 		}
 	}()
 }
 
-func CdnTester(res chan Addr, tres chan Addr, pwg *sync.WaitGroup, jobCount uint64, completeJobCount *uint64) {
+func CdnTester(res chan Addr, pwg *sync.WaitGroup, jobCount uint64, completeJobCount *uint64) {
 	go func() {
 		pwg.Add(1)
 		defer pwg.Done()
 		for addr := range res {
-			result := checkAvailability(testcdn, fmt.Sprintf("%s:%d", addr.ip, addr.port))
+			result := checkAvailability(addr.domain, fmt.Sprintf("%s:%d", addr.ip, addr.port))
 			if result.Status {
+				result.Domain = addr.WebServer
 				Writer.WriteSuccess(result)
 			} else {
-				println(fmt.Sprintf("%s:%d not available [%d, %d, %d, %d] %s", addr.ip, addr.port, goID(), len(res), len(tres), jobCount-*completeJobCount, time.Now().Format("15:04:05")))
+				println(fmt.Sprintf("%s:%d not available [%d, %d, %d] %s", addr.ip, addr.port, goID(), len(res), jobCount-*completeJobCount, time.Now().Format("15:04:05")))
 			}
 		}
 	}()
@@ -511,7 +530,7 @@ func SendIdentificationPacketFunction(data []byte, ip string, port uint64) (int,
 		//}
 		if dwSvc > UNKNOWN_PORT && dwSvc < SOCKET_CONNECT_FAILED {
 			//even.WorkingEvent = "found"
-			if szSvcName == "ssl/tls" || szSvcName == "http" {
+			if szSvcName == "http" || szSvcName == "ssl/tls" {
 				rst := Ghttp.GetHttpTitle(ip, Ghttp.HTTPorHTTPS, int(port))
 				even.WorkingEvent = rst
 				cert, err0 := Ghttp.GetCert(ip, int(port))
