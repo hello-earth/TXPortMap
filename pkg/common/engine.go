@@ -10,6 +10,7 @@ import (
 	"github.com/4dogs-cn/TXPortMap/pkg/conversion"
 	"github.com/4dogs-cn/TXPortMap/pkg/output"
 	"go.uber.org/ratelimit"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"runtime"
@@ -103,7 +104,6 @@ func (e *Engine) Run() {
 					//e.SubmitTask(addr)
 					//fmt.Println("ip:",ip,":port",port)
 					e.TaskChan <- addr
-					e.JobCount += 1
 				}
 			}
 		}
@@ -302,6 +302,8 @@ func (e *Engine) Parser() error {
 	// fmt.Println(e.TaskPorts)
 	// fmt.Println(e.ExcdPorts)
 
+	e.JobCount = e.ipRangeCount()
+
 	return nil
 }
 
@@ -466,8 +468,24 @@ func SendIdentificationPacketFunction(data []byte, ip string, port uint64) (int,
 	}
 
 	//fmt.Println(addr)
-	var dwSvc int = UNKNOWN_PORT
-	conn, err := net.DialTimeout("tcp", addr, time.Duration(tout*1000)*time.Millisecond)
+	var dwSvc = UNKNOWN_PORT
+	var conn net.Conn
+	var err error
+
+	if len(proxystr) > 0 {
+		dailer, err1 := proxy.SOCKS5("tcp", proxystr, nil, &net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 3 * time.Second,
+		})
+		if err1 == nil {
+			conn, err = dailer.Dial("tcp", addr)
+		} else {
+			err = err1
+		}
+	} else {
+		conn, err = net.DialTimeout("tcp", addr, time.Duration(tout*1000)*time.Millisecond)
+	}
+
 	if err != nil {
 		// 端口是closed状态
 		Writer.Request(ip, conversion.ToString(port), "tcp", fmt.Errorf("time out"))

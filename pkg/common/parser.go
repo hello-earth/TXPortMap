@@ -51,6 +51,7 @@ var (
 	Limiter    ratelimit.Limiter
 	filter     string
 	testcdn    bool
+	proxystr   string //使用代理
 )
 
 /**
@@ -84,6 +85,7 @@ func init() {
 	flag.BoolVar(&nbtscan, "nbtscan", false, "get netbios stat by UDP137 in local network")
 	flag.StringVar(&filter, "filter", "", "if the server name match")
 	flag.BoolVar(&testcdn, "testcdn", false, "if going to test cdn")
+	flag.StringVar(&proxystr, "proxy", "", "the proxy if it use")
 }
 
 type Identification_Packet struct {
