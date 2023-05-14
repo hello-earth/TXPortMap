@@ -59,7 +59,7 @@ func checkAvailability(domain string, maddr string) *output.ResultSuccess {
 			if strings.Index(text, "request success your ip is") != -1 {
 				even.StepIP = strings.Split(text, "your ip is ")[1]
 				even.Status = true
-				resp, err = http.Get("http://geoip.apie.cc/index.php?security=CUe36wCk28cVw2&ip=" + ip)
+				resp, err = http.Get("http://geoip.apie.cc/index.php?security=d222&ip=" + ip) //ip country check not necessary
 				if err == nil {
 					body, _ := ioutil.ReadAll(resp.Body)
 					if len(body) > 0 {
